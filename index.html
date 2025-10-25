@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Video Player | CORS-Enabled HLS/MPD Support</title>
+    <title>Advanced Web Video Player | HLS & MPD Support</title>
     <link href="https://vjs.zencdn.net/8.0.4/video-js.css" rel="stylesheet">
     <style>
         * {
@@ -43,6 +43,15 @@
         .subtitle {
             font-size: 1.2rem;
             opacity: 0.9;
+            margin-bottom: 15px;
+        }
+        
+        .url-info {
+            background: rgba(253, 187, 45, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-size: 0.9rem;
         }
         
         .player-container {
@@ -71,7 +80,7 @@
             gap: 20px;
         }
         
-        .source-controls, .player-options, .cors-solution {
+        .source-controls, .player-options, .share-section {
             background: rgba(0, 0, 0, 0.6);
             border-radius: 15px;
             padding: 20px;
@@ -94,7 +103,7 @@
             font-weight: 500;
         }
         
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 12px;
             border-radius: 8px;
@@ -102,6 +111,12 @@
             background: rgba(255, 255, 255, 0.1);
             color: white;
             font-size: 1rem;
+        }
+        
+        textarea {
+            height: 80px;
+            resize: vertical;
+            font-family: monospace;
         }
         
         input::placeholder {
@@ -200,18 +215,23 @@
             border: 1px solid rgba(241, 196, 15, 0.5);
         }
         
-        .cors-solution {
+        .share-section {
             grid-column: 1 / -1;
         }
         
-        .solution-steps {
-            margin: 15px 0;
-            padding-left: 20px;
+        .share-url {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
         }
         
-        .solution-steps li {
-            margin-bottom: 10px;
-            line-height: 1.5;
+        .share-url input {
+            flex: 1;
+        }
+        
+        .share-url button {
+            width: auto;
+            margin: 0;
         }
         
         @media (max-width: 768px) {
@@ -226,14 +246,21 @@
             .info-content {
                 grid-template-columns: 1fr;
             }
+            
+            .share-url {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Advanced Video Player</h1>
-            <p class="subtitle">CORS-Enabled HLS/MPD Support with Proxy Solutions</p>
+            <h1>Advanced Web Video Player</h1>
+            <p class="subtitle">Supports HLS & MPD streams with URL parameters</p>
+            <div class="url-info">
+                <strong>URL Format:</strong> https://yourdomain.com/player.html?url=STREAM_URL&type=STREAM_TYPE&proxy=true&autoplay=true
+            </div>
         </header>
         
         <div class="player-container">
@@ -252,7 +279,7 @@
                     
                     <div class="input-group">
                         <label for="stream-url">Stream URL</label>
-                        <input type="text" id="stream-url" placeholder="Enter HLS (.m3u8) or MPD URL" value="https://in-mc-fdlive.fancode.com/mumbai/119264_english_hls_b48419e67989269ta-di_h264/index.m3u8">
+                        <input type="text" id="stream-url" placeholder="Enter HLS (.m3u8) or MPD URL">
                     </div>
                     
                     <div class="input-group">
@@ -317,18 +344,27 @@
                     </div>
                 </div>
                 
-                <div class="cors-solution">
-                    <h2>CORS Solution</h2>
-                    <p>The stream you're trying to access has CORS restrictions. Here are possible solutions:</p>
+                <div class="share-section">
+                    <h2>Share & URL Parameters</h2>
+                    <p>Use the URL parameters below to load streams directly:</p>
                     
-                    <ul class="solution-steps">
-                        <li><strong>Option 1:</strong> Use the CORS Proxy (checked above) - This routes the stream through a proxy server</li>
-                        <li><strong>Option 2:</strong> Use a browser extension like "CORS Unblock" or "Moesif CORS"</li>
-                        <li><strong>Option 3:</strong> Run Chrome with disabled security: <code>chrome.exe --disable-web-security --user-data-dir="C:/ChromeDev"</code></li>
-                        <li><strong>Option 4:</strong> Contact the stream provider to enable CORS headers</li>
-                    </ul>
+                    <div class="input-group">
+                        <label for="share-url">Shareable URL</label>
+                        <div class="share-url">
+                            <input type="text" id="share-url" readonly>
+                            <button id="copy-url">Copy URL</button>
+                        </div>
+                    </div>
                     
-                    <button id="try-proxy">Try with CORS Proxy</button>
+                    <div class="input-group">
+                        <label for="url-params">Current URL Parameters</label>
+                        <textarea id="url-params" readonly></textarea>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="test-urls">Test URLs (Copy & paste in browser)</label>
+                        <textarea id="test-urls" readonly></textarea>
+                    </div>
                 </div>
             </div>
             
@@ -373,247 +409,350 @@
     <script src="https://cdn.jsdelivr.net/npm/@videojs/http-streaming@3.0.2/dist/videojs-http-streaming.min.js"></script>
     
     <script>
-        // Initialize the player with HLS and DASH support
-        const player = videojs('my-video', {
-            html5: {
-                vhs: {
-                    overrideNative: true,
-                    withCredentials: false
-                }
-            },
-            liveui: true,
-            playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2]
-        });
-
-        // CORS Proxy function
-        function getCorsProxyUrl(url) {
-            // Using public CORS proxies (Note: These might have limitations)
-            const proxies = [
-                `https://corsproxy.io/?${encodeURIComponent(url)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-                `https://cors-anywhere.herokuapp.com/${url}`
-            ];
-            return proxies[0]; // Using corsproxy.io as default
-        }
-
-        // DOM elements
-        const streamUrlInput = document.getElementById('stream-url');
-        const streamTypeSelect = document.getElementById('stream-type');
-        const useCorsCheckbox = document.getElementById('use-cors');
-        const useProxyCheckbox = document.getElementById('use-proxy');
-        const loadStreamButton = document.getElementById('load-stream');
-        const tryProxyButton = document.getElementById('try-proxy');
-        const playbackRateSelect = document.getElementById('playback-rate');
-        const autoplayCheckbox = document.getElementById('autoplay');
-        const loopCheckbox = document.getElementById('loop');
-        const mutedCheckbox = document.getElementById('muted');
-        const presetButtons = document.querySelectorAll('.preset-btn');
-        const statusMessage = document.getElementById('status-message');
-
-        // Info panel elements
-        const currentSourceElement = document.getElementById('current-source');
-        const currentFormatElement = document.getElementById('current-format');
-        const currentResolutionElement = document.getElementById('current-resolution');
-        const currentDurationElement = document.getElementById('current-duration');
-        const currentTimeElement = document.getElementById('current-time');
-        const bufferLevelElement = document.getElementById('buffer-level');
-
-        // Show status message
-        function showStatus(message, isError = false, isWarning = false) {
-            statusMessage.textContent = message;
-            let statusClass = 'status-message ';
-            if (isError) {
-                statusClass += 'status-error';
-            } else if (isWarning) {
-                statusClass += 'status-warning';
-            } else {
-                statusClass += 'status-success';
+        // URL Parameter Handler
+        class URLParamsHandler {
+            constructor() {
+                this.params = new URLSearchParams(window.location.search);
             }
-            statusMessage.className = statusClass;
-        }
-
-        // Test if URL is accessible
-        async function testUrlAccessibility(url) {
-            try {
-                const response = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
-                return true;
-            } catch (error) {
-                console.log('Direct access failed:', error);
-                return false;
-            }
-        }
-
-        // Load stream function
-        async function loadStream() {
-            let url = streamUrlInput.value.trim();
-            if (!url) {
-                showStatus('Please enter a stream URL', true);
-                return;
-            }
-
-            // Determine stream type
-            let type = streamTypeSelect.value;
-            if (type === 'auto') {
-                if (url.includes('.m3u8')) {
-                    type = 'hls';
-                } else if (url.includes('.mpd')) {
-                    type = 'dash';
-                } else {
-                    showStatus('Could not auto-detect stream type. Please select manually.', true);
-                    return;
-                }
-            }
-
-            // Use proxy if selected
-            const useProxy = useProxyCheckbox.checked;
-            const originalUrl = url;
             
-            if (useProxy) {
-                url = getCorsProxyUrl(url);
-                showStatus('Using CORS proxy to access stream...', false, true);
+            getParam(name) {
+                return this.params.get(name);
+            }
+            
+            getAllParams() {
+                const params = {};
+                for (const [key, value] of this.params.entries()) {
+                    params[key] = value;
+                }
+                return params;
+            }
+            
+            setParam(name, value) {
+                this.params.set(name, value);
+                this.updateURL();
+            }
+            
+            deleteParam(name) {
+                this.params.delete(name);
+                this.updateURL();
+            }
+            
+            updateURL() {
+                const newUrl = window.location.pathname + '?' + this.params.toString();
+                window.history.replaceState({}, '', newUrl);
+            }
+            
+            generateShareableURL(baseParams = {}) {
+                const shareParams = new URLSearchParams();
+                
+                // Add current stream parameters
+                if (baseParams.url) shareParams.set('url', baseParams.url);
+                if (baseParams.type && baseParams.type !== 'auto') shareParams.set('type', baseParams.type);
+                if (baseParams.proxy === 'true') shareParams.set('proxy', 'true');
+                if (baseParams.autoplay === 'true') shareParams.set('autoplay', 'true');
+                if (baseParams.muted === 'true') shareParams.set('muted', 'true');
+                
+                return window.location.origin + window.location.pathname + '?' + shareParams.toString();
+            }
+        }
+
+        // Video Player Class
+        class VideoPlayer {
+            constructor() {
+                this.urlHandler = new URLParamsHandler();
+                this.player = null;
+                this.currentStream = null;
+                this.initializePlayer();
+                this.setupEventListeners();
+                this.loadFromURLParams();
+                this.updateTestURLs();
             }
 
-            // Configure CORS
-            if (player.tech_.vhs) {
-                player.tech_.vhs.xhr.withCredentials = useCorsCheckbox.checked;
-            }
-
-            // Set player options
-            player.autoplay(autoplayCheckbox.checked ? 'any' : false);
-            player.loop(loopCheckbox.checked);
-            player.muted(mutedCheckbox.checked);
-
-            // Show loading status
-            showStatus('Loading stream...', false, true);
-
-            try {
-                // Load the source
-                player.src({
-                    src: url,
-                    type: type === 'hls' ? 'application/x-mpegURL' : 'application/dash+xml',
-                    withCredentials: useCorsCheckbox.checked
+            initializePlayer() {
+                this.player = videojs('my-video', {
+                    html5: {
+                        vhs: {
+                            overrideNative: true,
+                            withCredentials: false
+                        }
+                    },
+                    liveui: true,
+                    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2]
                 });
 
-                // Update info panel
-                currentSourceElement.textContent = originalUrl;
-                currentFormatElement.textContent = type.toUpperCase() + (useProxy ? ' (via Proxy)' : '');
-
-                console.log(`Loading ${type} stream: ${url}`);
-            } catch (error) {
-                console.error('Error loading stream:', error);
-                showStatus('Error loading stream: ' + error.message, true);
-            }
-        }
-
-        // Handle playback rate change
-        playbackRateSelect.addEventListener('change', function() {
-            player.playbackRate(parseFloat(this.value));
-        });
-
-        // Format time in MM:SS
-        function formatTime(seconds) {
-            if (isNaN(seconds)) return '00:00';
-            
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // Update player information
-        function updatePlayerInfo() {
-            // Update time and duration
-            if (player.duration() && isFinite(player.duration())) {
-                currentDurationElement.textContent = formatTime(player.duration());
-                currentTimeElement.textContent = formatTime(player.currentTime());
+                // Player event listeners
+                this.player.on('loadstart', () => this.updateStatus('Loading stream...', 'warning'));
+                this.player.on('loadedmetadata', () => this.onLoadedMetadata());
+                this.player.on('canplay', () => this.updateStatus('Stream ready', 'success'));
+                this.player.on('error', () => this.onPlayerError());
             }
 
-            // Update buffer level
-            if (player.buffered() && player.buffered().length > 0 && player.duration() > 0) {
-                const bufferedEnd = player.buffered().end(player.buffered().length - 1);
-                const bufferPercent = (bufferedEnd / player.duration()) * 100;
-                bufferLevelElement.textContent = `${Math.round(bufferPercent)}%`;
-            }
+            setupEventListeners() {
+                // DOM elements
+                this.streamUrlInput = document.getElementById('stream-url');
+                this.streamTypeSelect = document.getElementById('stream-type');
+                this.useCorsCheckbox = document.getElementById('use-cors');
+                this.useProxyCheckbox = document.getElementById('use-proxy');
+                this.loadStreamButton = document.getElementById('load-stream');
+                this.playbackRateSelect = document.getElementById('playback-rate');
+                this.autoplayCheckbox = document.getElementById('autoplay');
+                this.loopCheckbox = document.getElementById('loop');
+                this.mutedCheckbox = document.getElementById('muted');
+                this.presetButtons = document.querySelectorAll('.preset-btn');
+                this.statusMessage = document.getElementById('status-message');
+                this.shareUrlInput = document.getElementById('share-url');
+                this.urlParamsTextarea = document.getElementById('url-params');
+                this.copyUrlButton = document.getElementById('copy-url');
 
-            // Update resolution if available
-            const videoEl = player.tech().el();
-            if (videoEl.videoWidth && videoEl.videoHeight) {
-                currentResolutionElement.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
-            }
-        }
-
-        // Set up event listeners
-        loadStreamButton.addEventListener('click', loadStream);
-        tryProxyButton.addEventListener('click', function() {
-            useProxyCheckbox.checked = true;
-            loadStream();
-        });
-
-        // Handle preset buttons
-        presetButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                streamUrlInput.value = this.getAttribute('data-url');
-                streamTypeSelect.value = this.getAttribute('data-type');
-                useProxyCheckbox.checked = false; // Presets usually don't need proxy
-                loadStream();
-            });
-        });
-
-        // Update player info periodically
-        setInterval(updatePlayerInfo, 500);
-
-        // Handle player events
-        player.on('loadedmetadata', function() {
-            console.log('Video metadata loaded');
-            showStatus('Stream loaded successfully');
-            updatePlayerInfo();
-        });
-
-        player.on('loadstart', function() {
-            console.log('Starting to load video');
-        });
-
-        player.on('canplay', function() {
-            console.log('Video can start playing');
-        });
-
-        player.on('error', function() {
-            const error = player.error();
-            console.error('Video error:', error);
-            
-            if (error) {
-                let errorMessage = 'An error occurred';
+                // Event listeners
+                this.loadStreamButton.addEventListener('click', () => this.loadStreamFromInput());
+                this.copyUrlButton.addEventListener('click', () => this.copyShareUrl());
                 
-                switch(error.code) {
-                    case 1:
-                        errorMessage = 'Video loading aborted';
-                        break;
-                    case 2:
-                        errorMessage = 'Network error - CORS issue detected. Try using the CORS proxy.';
-                        break;
-                    case 3:
-                        errorMessage = 'Video decoding error';
-                        break;
-                    case 4:
-                        errorMessage = 'Video format not supported';
-                        break;
+                this.playbackRateSelect.addEventListener('change', (e) => {
+                    this.player.playbackRate(parseFloat(e.target.value));
+                });
+
+                // Preset buttons
+                this.presetButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const url = button.getAttribute('data-url');
+                        const type = button.getAttribute('data-type');
+                        this.streamUrlInput.value = url;
+                        this.streamTypeSelect.value = type;
+                        this.loadStream(url, type);
+                    });
+                });
+
+                // Update share URL when inputs change
+                [this.streamUrlInput, this.streamTypeSelect, this.useProxyCheckbox, 
+                 this.autoplayCheckbox, this.mutedCheckbox].forEach(element => {
+                    element.addEventListener('change', () => this.updateShareUrl());
+                });
+            }
+
+            getCorsProxyUrl(url) {
+                return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            }
+
+            loadFromURLParams() {
+                const url = this.urlHandler.getParam('url');
+                const type = this.urlHandler.getParam('type') || 'auto';
+                const useProxy = this.urlHandler.getParam('proxy') === 'true';
+                const autoplay = this.urlHandler.getParam('autoplay') === 'true';
+                const muted = this.urlHandler.getParam('muted') === 'true';
+
+                // Update UI from URL params
+                if (url) {
+                    this.streamUrlInput.value = url;
+                    this.streamTypeSelect.value = type;
+                    this.useProxyCheckbox.checked = useProxy;
+                    this.autoplayCheckbox.checked = autoplay;
+                    this.mutedCheckbox.checked = muted;
+
+                    // Load the stream
+                    this.loadStream(url, type);
+                }
+
+                this.updateURLParamsDisplay();
+                this.updateShareUrl();
+            }
+
+            loadStreamFromInput() {
+                const url = this.streamUrlInput.value.trim();
+                const type = this.streamTypeSelect.value;
+                this.loadStream(url, type);
+            }
+
+            async loadStream(url, type) {
+                if (!url) {
+                    this.updateStatus('Please enter a stream URL', true);
+                    return;
+                }
+
+                this.currentStream = { url, type };
+                
+                // Update URL parameters
+                this.urlHandler.setParam('url', url);
+                if (type !== 'auto') {
+                    this.urlHandler.setParam('type', type);
+                } else {
+                    this.urlHandler.deleteParam('type');
+                }
+
+                // Determine final type
+                let finalType = type;
+                if (type === 'auto') {
+                    if (url.includes('.m3u8')) {
+                        finalType = 'hls';
+                    } else if (url.includes('.mpd')) {
+                        finalType = 'dash';
+                    } else {
+                        this.updateStatus('Could not auto-detect stream type', true);
+                        return;
+                    }
+                }
+
+                const useProxy = this.useProxyCheckbox.checked;
+                const finalUrl = useProxy ? this.getCorsProxyUrl(url) : url;
+
+                // Update UI
+                document.getElementById('current-source').textContent = url;
+                document.getElementById('current-format').textContent = finalType.toUpperCase();
+                this.updateStatus('Loading stream...', false, true);
+
+                try {
+                    // Determine MIME type
+                    let mimeType;
+                    if (finalType === 'hls') {
+                        mimeType = 'application/x-mpegURL';
+                    } else if (finalType === 'dash') {
+                        mimeType = 'application/dash+xml';
+                    }
+
+                    // Load the source
+                    this.player.src({
+                        src: finalUrl,
+                        type: mimeType,
+                        withCredentials: this.useCorsCheckbox.checked
+                    });
+
+                    // Apply settings
+                    this.player.autoplay(this.autoplayCheckbox.checked);
+                    this.player.muted(this.mutedCheckbox.checked);
+                    this.player.loop(this.loopCheckbox.checked);
+
+                    this.updateShareUrl();
+                    this.updateURLParamsDisplay();
+
+                } catch (error) {
+                    console.error('Error loading stream:', error);
+                    this.updateStatus('Error loading stream: ' + error.message, true);
+                }
+            }
+
+            onLoadedMetadata() {
+                this.updateStatus('Stream loaded successfully');
+                this.updateStreamInfo();
+            }
+
+            onPlayerError() {
+                const error = this.player.error();
+                console.error('Player error:', error);
+                
+                let errorMessage = 'Unknown error';
+                if (error) {
+                    switch(error.code) {
+                        case 1:
+                            errorMessage = 'Video loading aborted';
+                            break;
+                        case 2:
+                            errorMessage = 'Network error - CORS issue detected';
+                            break;
+                        case 3:
+                            errorMessage = 'Video decoding error';
+                            break;
+                        case 4:
+                            errorMessage = 'Video format not supported';
+                            break;
+                    }
                 }
                 
-                showStatus(`Error: ${errorMessage}`, true);
+                this.updateStatus(`Error: ${errorMessage}`, true);
                 
                 // Suggest using proxy for CORS errors
-                if (error.code === 2 && !useProxyCheckbox.checked) {
-                    showStatus('CORS error detected. Try using the CORS Proxy option.', true);
+                if (error && error.code === 2) {
+                    this.useProxyCheckbox.checked = true;
+                    this.updateStatus('CORS error detected. Proxy enabled. Try reloading.', false, true);
                 }
             }
-        });
 
-        // Initialize with the provided stream (with proxy by default due to CORS)
-        window.addEventListener('DOMContentLoaded', function() {
-            // Auto-set to use proxy for the provided URL since we know it has CORS issues
-            useProxyCheckbox.checked = true;
+            updateStatus(message, isError = false, isWarning = false) {
+                this.statusMessage.textContent = message;
+                let statusClass = 'status-message ';
+                if (isError) {
+                    statusClass += 'status-error';
+                } else if (isWarning) {
+                    statusClass += 'status-warning';
+                } else {
+                    statusClass += 'status-success';
+                }
+                this.statusMessage.className = statusClass;
+            }
+
+            updateStreamInfo() {
+                // Update time and duration
+                if (this.player.duration() && isFinite(this.player.duration())) {
+                    document.getElementById('current-duration').textContent = this.formatTime(this.player.duration());
+                    document.getElementById('current-time').textContent = this.formatTime(this.player.currentTime());
+                }
+
+                // Update buffer level
+                if (this.player.buffered() && this.player.buffered().length > 0 && this.player.duration() > 0) {
+                    const bufferedEnd = this.player.buffered().end(this.player.buffered().length - 1);
+                    const bufferPercent = (bufferedEnd / this.player.duration()) * 100;
+                    document.getElementById('buffer-level').textContent = `${Math.round(bufferPercent)}%`;
+                }
+
+                // Update resolution if available
+                const videoEl = this.player.tech().el();
+                if (videoEl.videoWidth && videoEl.videoHeight) {
+                    document.getElementById('current-resolution').textContent = 
+                        `${videoEl.videoWidth}x${videoEl.videoHeight}`;
+                }
+            }
+
+            formatTime(seconds) {
+                if (isNaN(seconds)) return '00:00';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            updateShareUrl() {
+                const params = {
+                    url: this.streamUrlInput.value,
+                    type: this.streamTypeSelect.value,
+                    proxy: this.useProxyCheckbox.checked.toString(),
+                    autoplay: this.autoplayCheckbox.checked.toString(),
+                    muted: this.mutedCheckbox.checked.toString()
+                };
+                
+                const shareUrl = this.urlHandler.generateShareableURL(params);
+                this.shareUrlInput.value = shareUrl;
+            }
+
+            updateURLParamsDisplay() {
+                const params = this.urlHandler.getAllParams();
+                this.urlParamsTextarea.value = JSON.stringify(params, null, 2);
+            }
+
+            updateTestURLs() {
+                const baseUrl = window.location.origin + window.location.pathname;
+                const testUrls = [
+                    `${baseUrl}?url=https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8&type=hls`,
+                    `${baseUrl}?url=https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd&type=dash`,
+                    `${baseUrl}?url=https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8&proxy=true`,
+                    `${baseUrl}?url=https://livesim.dashif.org/livesim/chunkdur_1/ato_7/testpic4_8s/Manifest.mpd&autoplay=true&muted=true`
+                ].join('\n\n');
+                
+                document.getElementById('test-urls').value = testUrls;
+            }
+
+            copyShareUrl() {
+                this.shareUrlInput.select();
+                document.execCommand('copy');
+                this.updateStatus('URL copied to clipboard!');
+            }
+        }
+
+        // Initialize the player when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.videoPlayer = new VideoPlayer();
             
-            // Load the stream after a short delay
-            setTimeout(loadStream, 1000);
+            // Update player info periodically
+            setInterval(() => {
+                window.videoPlayer.updateStreamInfo();
+            }, 1000);
         });
     </script>
 </body>
