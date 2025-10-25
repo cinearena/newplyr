@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Video Player</title>
-    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/videojs-contrib-quality-levels@2.2.0/dist/videojs-contrib-quality-levels.min.css" rel="stylesheet">
+    <title>Advanced Video Player | HLS & MPD Support</title>
+    <link href="https://vjs.zencdn.net/8.0.4/video-js.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -178,6 +177,24 @@
             color: #fdbb2d;
         }
         
+        .status-message {
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .status-success {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid rgba(46, 204, 113, 0.5);
+        }
+        
+        .status-error {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.5);
+        }
+        
         @media (max-width: 768px) {
             .controls-section {
                 grid-template-columns: 1fr;
@@ -202,7 +219,7 @@
         
         <div class="player-container">
             <div class="video-section">
-                <video id="my-video" class="video-js vjs-default-skin" controls preload="auto">
+                <video id="my-video" class="video-js vjs-default-skin" controls preload="auto" width="100%" height="500">
                     <p class="vjs-no-js">
                         To view this video please enable JavaScript, and consider upgrading to a
                         web browser that <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
@@ -235,21 +252,18 @@
                     
                     <button id="load-stream">Load Stream</button>
                     
+                    <div id="status-message"></div>
+                    
                     <div class="preset-buttons">
-                        <button class="preset-btn" data-url="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" data-type="hls">HLS Sample</button>
-                        <button class="preset-btn" data-url="https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd" data-type="dash">MPD Sample</button>
+                        <button class="preset-btn" data-url="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" data-type="hls">HLS Sample 1</button>
+                        <button class="preset-btn" data-url="https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8" data-type="hls">HLS Sample 2</button>
+                        <button class="preset-btn" data-url="https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd" data-type="dash">MPD Sample 1</button>
+                        <button class="preset-btn" data-url="https://livesim.dashif.org/livesim/chunkdur_1/ato_7/testpic4_8s/Manifest.mpd" data-type="dash">MPD Sample 2</button>
                     </div>
                 </div>
                 
                 <div class="player-options">
                     <h2>Player Options</h2>
-                    
-                    <div class="input-group">
-                        <label for="quality-selector">Quality Level</label>
-                        <select id="quality-selector">
-                            <option value="auto">Auto</option>
-                        </select>
-                    </div>
                     
                     <div class="input-group">
                         <label for="playback-rate">Playback Rate</label>
@@ -317,25 +331,21 @@
     </div>
 
     <!-- Video.js and plugins -->
-    <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-quality-levels@2.2.0/dist/videojs-contrib-quality-levels.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/videojs-hls-quality-selector@1.1.4/dist/videojs-hls-quality-selector.min.js"></script>
+    <script src="https://vjs.zencdn.net/8.0.4/video.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@videojs/http-streaming@3.0.2/dist/videojs-http-streaming.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-quality-levels@2.2.0/dist/videojs-contrib-quality-levels.min.js"></script>
     
     <script>
-        // Initialize the player
+        // Initialize the player with HLS and DASH support
         const player = videojs('my-video', {
             html5: {
                 vhs: {
+                    overrideNative: true,
                     withCredentials: false
                 }
             },
-            plugins: {
-                // Enable HLS quality selector
-                hlsQualitySelector: {
-                    displayCurrentQuality: true,
-                }
-            }
+            liveui: true,
+            playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2]
         });
         
         // DOM elements
@@ -343,12 +353,12 @@
         const streamTypeSelect = document.getElementById('stream-type');
         const useCorsCheckbox = document.getElementById('use-cors');
         const loadStreamButton = document.getElementById('load-stream');
-        const qualitySelector = document.getElementById('quality-selector');
         const playbackRateSelect = document.getElementById('playback-rate');
         const autoplayCheckbox = document.getElementById('autoplay');
         const loopCheckbox = document.getElementById('loop');
         const mutedCheckbox = document.getElementById('muted');
         const presetButtons = document.querySelectorAll('.preset-btn');
+        const statusMessage = document.getElementById('status-message');
         
         // Info panel elements
         const currentSourceElement = document.getElementById('current-source');
@@ -358,11 +368,23 @@
         const currentTimeElement = document.getElementById('current-time');
         const bufferLevelElement = document.getElementById('buffer-level');
         
+        // Show status message
+        function showStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.className = 'status-message ' + (isError ? 'status-error' : 'status-success');
+            
+            // Clear message after 5 seconds
+            setTimeout(() => {
+                statusMessage.textContent = '';
+                statusMessage.className = 'status-message';
+            }, 5000);
+        }
+        
         // Load stream function
         function loadStream() {
             const url = streamUrlInput.value.trim();
             if (!url) {
-                alert('Please enter a stream URL');
+                showStatus('Please enter a stream URL', true);
                 return;
             }
             
@@ -374,18 +396,23 @@
                 } else if (url.includes('.mpd')) {
                     type = 'dash';
                 } else {
-                    alert('Could not auto-detect stream type. Please select manually.');
+                    showStatus('Could not auto-detect stream type. Please select manually.', true);
                     return;
                 }
             }
             
             // Configure CORS
-            player.tech().hls.xhr.withCredentials = useCorsCheckbox.checked;
+            if (player.tech_.vhs) {
+                player.tech_.vhs.xhr.withCredentials = useCorsCheckbox.checked;
+            }
             
             // Set player options
-            player.autoplay(autoplayCheckbox.checked);
+            player.autoplay(autoplayCheckbox.checked ? 'any' : false);
             player.loop(loopCheckbox.checked);
             player.muted(mutedCheckbox.checked);
+            
+            // Show loading status
+            showStatus('Loading stream...');
             
             // Load the source
             player.src({
@@ -398,45 +425,33 @@
             currentSourceElement.textContent = url;
             currentFormatElement.textContent = type.toUpperCase();
             
-            // Reset quality selector
-            qualitySelector.innerHTML = '<option value="auto">Auto</option>';
-            
             console.log(`Loading ${type} stream: ${url}`);
         }
-        
-        // Update quality selector when levels are available
-        player.qualityLevels().on('addqualitylevel', function(event) {
-            const qualityLevel = event.qualityLevel;
-            const option = document.createElement('option');
-            option.value = qualityLevel.id;
-            option.textContent = `${qualityLevel.height}p (${Math.round(qualityLevel.bitrate / 1000)} kbps)`;
-            qualitySelector.appendChild(option);
-        });
-        
-        // Handle quality change
-        qualitySelector.addEventListener('change', function() {
-            if (this.value === 'auto') {
-                player.qualityLevels().selectedIndex_ = -1;
-            } else {
-                player.qualityLevels().selectedIndex_ = parseInt(this.value);
-            }
-        });
         
         // Handle playback rate change
         playbackRateSelect.addEventListener('change', function() {
             player.playbackRate(parseFloat(this.value));
         });
         
+        // Format time in MM:SS
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '00:00';
+            
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        
         // Update player information
         function updatePlayerInfo() {
             // Update time and duration
-            if (player.duration()) {
+            if (player.duration() && isFinite(player.duration())) {
                 currentDurationElement.textContent = formatTime(player.duration());
                 currentTimeElement.textContent = formatTime(player.currentTime());
             }
             
             // Update buffer level
-            if (player.buffered().length > 0) {
+            if (player.buffered() && player.buffered().length > 0 && player.duration() > 0) {
                 const bufferedEnd = player.buffered().end(player.buffered().length - 1);
                 const bufferPercent = (bufferedEnd / player.duration()) * 100;
                 bufferLevelElement.textContent = `${Math.round(bufferPercent)}%`;
@@ -447,13 +462,6 @@
             if (videoEl.videoWidth && videoEl.videoHeight) {
                 currentResolutionElement.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
             }
-        }
-        
-        // Format time in MM:SS
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
         
         // Set up event listeners
@@ -474,6 +482,7 @@
         // Handle player events
         player.on('loadedmetadata', function() {
             console.log('Video metadata loaded');
+            showStatus('Stream loaded successfully');
             updatePlayerInfo();
         });
         
@@ -485,11 +494,39 @@
             console.log('Video can start playing');
         });
         
+        player.on('error', function() {
+            const error = player.error();
+            console.error('Video error:', error);
+            
+            if (error) {
+                let errorMessage = 'An error occurred';
+                
+                switch(error.code) {
+                    case 1:
+                        errorMessage = 'Video loading aborted';
+                        break;
+                    case 2:
+                        errorMessage = 'Network error - check CORS settings';
+                        break;
+                    case 3:
+                        errorMessage = 'Video decoding error';
+                        break;
+                    case 4:
+                        errorMessage = 'Video format not supported';
+                        break;
+                }
+                
+                showStatus(`Error: ${errorMessage}`, true);
+            }
+        });
+        
         // Initialize with a sample stream
         window.addEventListener('DOMContentLoaded', function() {
             streamUrlInput.value = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
             streamTypeSelect.value = 'hls';
-            loadStream();
+            
+            // Load the sample stream after a short delay
+            setTimeout(loadStream, 500);
         });
     </script>
 </body>
