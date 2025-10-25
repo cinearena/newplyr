@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Video Player | HLS & MPD Support</title>
+    <title>Advanced Video Player | CORS-Enabled HLS/MPD Support</title>
     <link href="https://vjs.zencdn.net/8.0.4/video-js.css" rel="stylesheet">
     <style>
         * {
@@ -71,7 +71,7 @@
             gap: 20px;
         }
         
-        .source-controls, .player-options {
+        .source-controls, .player-options, .cors-solution {
             background: rgba(0, 0, 0, 0.6);
             border-radius: 15px;
             padding: 20px;
@@ -195,6 +195,25 @@
             border: 1px solid rgba(231, 76, 60, 0.5);
         }
         
+        .status-warning {
+            background: rgba(241, 196, 15, 0.2);
+            border: 1px solid rgba(241, 196, 15, 0.5);
+        }
+        
+        .cors-solution {
+            grid-column: 1 / -1;
+        }
+        
+        .solution-steps {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+        
+        .solution-steps li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
         @media (max-width: 768px) {
             .controls-section {
                 grid-template-columns: 1fr;
@@ -214,7 +233,7 @@
     <div class="container">
         <header>
             <h1>Advanced Video Player</h1>
-            <p class="subtitle">Supports HLS, MPD streams with CORS handling</p>
+            <p class="subtitle">CORS-Enabled HLS/MPD Support with Proxy Solutions</p>
         </header>
         
         <div class="player-container">
@@ -233,7 +252,7 @@
                     
                     <div class="input-group">
                         <label for="stream-url">Stream URL</label>
-                        <input type="text" id="stream-url" placeholder="Enter HLS (.m3u8) or MPD URL">
+                        <input type="text" id="stream-url" placeholder="Enter HLS (.m3u8) or MPD URL" value="https://in-mc-fdlive.fancode.com/mumbai/119264_english_hls_b48419e67989269ta-di_h264/index.m3u8">
                     </div>
                     
                     <div class="input-group">
@@ -248,6 +267,11 @@
                     <div class="checkbox-group">
                         <input type="checkbox" id="use-cors" checked>
                         <label for="use-cors">Enable CORS</label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="use-proxy">
+                        <label for="use-proxy">Use CORS Proxy</label>
                     </div>
                     
                     <button id="load-stream">Load Stream</button>
@@ -288,9 +312,23 @@
                     </div>
                     
                     <div class="checkbox-group">
-                        <input type="checkbox" id="muted">
-                        <label for="muted">Muted</label>
+                        <input type="checkbox" id="muted" checked>
+                        <label for="muted">Muted (Recommended)</label>
                     </div>
+                </div>
+                
+                <div class="cors-solution">
+                    <h2>CORS Solution</h2>
+                    <p>The stream you're trying to access has CORS restrictions. Here are possible solutions:</p>
+                    
+                    <ul class="solution-steps">
+                        <li><strong>Option 1:</strong> Use the CORS Proxy (checked above) - This routes the stream through a proxy server</li>
+                        <li><strong>Option 2:</strong> Use a browser extension like "CORS Unblock" or "Moesif CORS"</li>
+                        <li><strong>Option 3:</strong> Run Chrome with disabled security: <code>chrome.exe --disable-web-security --user-data-dir="C:/ChromeDev"</code></li>
+                        <li><strong>Option 4:</strong> Contact the stream provider to enable CORS headers</li>
+                    </ul>
+                    
+                    <button id="try-proxy">Try with CORS Proxy</button>
                 </div>
             </div>
             
@@ -333,7 +371,6 @@
     <!-- Video.js and plugins -->
     <script src="https://vjs.zencdn.net/8.0.4/video.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@videojs/http-streaming@3.0.2/dist/videojs-http-streaming.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-quality-levels@2.2.0/dist/videojs-contrib-quality-levels.min.js"></script>
     
     <script>
         // Initialize the player with HLS and DASH support
@@ -347,19 +384,32 @@
             liveui: true,
             playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2]
         });
-        
+
+        // CORS Proxy function
+        function getCorsProxyUrl(url) {
+            // Using public CORS proxies (Note: These might have limitations)
+            const proxies = [
+                `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                `https://cors-anywhere.herokuapp.com/${url}`
+            ];
+            return proxies[0]; // Using corsproxy.io as default
+        }
+
         // DOM elements
         const streamUrlInput = document.getElementById('stream-url');
         const streamTypeSelect = document.getElementById('stream-type');
         const useCorsCheckbox = document.getElementById('use-cors');
+        const useProxyCheckbox = document.getElementById('use-proxy');
         const loadStreamButton = document.getElementById('load-stream');
+        const tryProxyButton = document.getElementById('try-proxy');
         const playbackRateSelect = document.getElementById('playback-rate');
         const autoplayCheckbox = document.getElementById('autoplay');
         const loopCheckbox = document.getElementById('loop');
         const mutedCheckbox = document.getElementById('muted');
         const presetButtons = document.querySelectorAll('.preset-btn');
         const statusMessage = document.getElementById('status-message');
-        
+
         // Info panel elements
         const currentSourceElement = document.getElementById('current-source');
         const currentFormatElement = document.getElementById('current-format');
@@ -367,27 +417,40 @@
         const currentDurationElement = document.getElementById('current-duration');
         const currentTimeElement = document.getElementById('current-time');
         const bufferLevelElement = document.getElementById('buffer-level');
-        
+
         // Show status message
-        function showStatus(message, isError = false) {
+        function showStatus(message, isError = false, isWarning = false) {
             statusMessage.textContent = message;
-            statusMessage.className = 'status-message ' + (isError ? 'status-error' : 'status-success');
-            
-            // Clear message after 5 seconds
-            setTimeout(() => {
-                statusMessage.textContent = '';
-                statusMessage.className = 'status-message';
-            }, 5000);
+            let statusClass = 'status-message ';
+            if (isError) {
+                statusClass += 'status-error';
+            } else if (isWarning) {
+                statusClass += 'status-warning';
+            } else {
+                statusClass += 'status-success';
+            }
+            statusMessage.className = statusClass;
         }
-        
+
+        // Test if URL is accessible
+        async function testUrlAccessibility(url) {
+            try {
+                const response = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
+                return true;
+            } catch (error) {
+                console.log('Direct access failed:', error);
+                return false;
+            }
+        }
+
         // Load stream function
-        function loadStream() {
-            const url = streamUrlInput.value.trim();
+        async function loadStream() {
+            let url = streamUrlInput.value.trim();
             if (!url) {
                 showStatus('Please enter a stream URL', true);
                 return;
             }
-            
+
             // Determine stream type
             let type = streamTypeSelect.value;
             if (type === 'auto') {
@@ -400,39 +463,53 @@
                     return;
                 }
             }
+
+            // Use proxy if selected
+            const useProxy = useProxyCheckbox.checked;
+            const originalUrl = url;
             
+            if (useProxy) {
+                url = getCorsProxyUrl(url);
+                showStatus('Using CORS proxy to access stream...', false, true);
+            }
+
             // Configure CORS
             if (player.tech_.vhs) {
                 player.tech_.vhs.xhr.withCredentials = useCorsCheckbox.checked;
             }
-            
+
             // Set player options
             player.autoplay(autoplayCheckbox.checked ? 'any' : false);
             player.loop(loopCheckbox.checked);
             player.muted(mutedCheckbox.checked);
-            
+
             // Show loading status
-            showStatus('Loading stream...');
-            
-            // Load the source
-            player.src({
-                src: url,
-                type: type === 'hls' ? 'application/x-mpegURL' : 'application/dash+xml',
-                withCredentials: useCorsCheckbox.checked
-            });
-            
-            // Update info panel
-            currentSourceElement.textContent = url;
-            currentFormatElement.textContent = type.toUpperCase();
-            
-            console.log(`Loading ${type} stream: ${url}`);
+            showStatus('Loading stream...', false, true);
+
+            try {
+                // Load the source
+                player.src({
+                    src: url,
+                    type: type === 'hls' ? 'application/x-mpegURL' : 'application/dash+xml',
+                    withCredentials: useCorsCheckbox.checked
+                });
+
+                // Update info panel
+                currentSourceElement.textContent = originalUrl;
+                currentFormatElement.textContent = type.toUpperCase() + (useProxy ? ' (via Proxy)' : '');
+
+                console.log(`Loading ${type} stream: ${url}`);
+            } catch (error) {
+                console.error('Error loading stream:', error);
+                showStatus('Error loading stream: ' + error.message, true);
+            }
         }
-        
+
         // Handle playback rate change
         playbackRateSelect.addEventListener('change', function() {
             player.playbackRate(parseFloat(this.value));
         });
-        
+
         // Format time in MM:SS
         function formatTime(seconds) {
             if (isNaN(seconds)) return '00:00';
@@ -441,7 +518,7 @@
             const secs = Math.floor(seconds % 60);
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
-        
+
         // Update player information
         function updatePlayerInfo() {
             // Update time and duration
@@ -449,51 +526,56 @@
                 currentDurationElement.textContent = formatTime(player.duration());
                 currentTimeElement.textContent = formatTime(player.currentTime());
             }
-            
+
             // Update buffer level
             if (player.buffered() && player.buffered().length > 0 && player.duration() > 0) {
                 const bufferedEnd = player.buffered().end(player.buffered().length - 1);
                 const bufferPercent = (bufferedEnd / player.duration()) * 100;
                 bufferLevelElement.textContent = `${Math.round(bufferPercent)}%`;
             }
-            
+
             // Update resolution if available
             const videoEl = player.tech().el();
             if (videoEl.videoWidth && videoEl.videoHeight) {
                 currentResolutionElement.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
             }
         }
-        
+
         // Set up event listeners
         loadStreamButton.addEventListener('click', loadStream);
-        
+        tryProxyButton.addEventListener('click', function() {
+            useProxyCheckbox.checked = true;
+            loadStream();
+        });
+
         // Handle preset buttons
         presetButtons.forEach(button => {
             button.addEventListener('click', function() {
                 streamUrlInput.value = this.getAttribute('data-url');
                 streamTypeSelect.value = this.getAttribute('data-type');
+                useProxyCheckbox.checked = false; // Presets usually don't need proxy
                 loadStream();
             });
         });
-        
+
         // Update player info periodically
         setInterval(updatePlayerInfo, 500);
-        
+
         // Handle player events
         player.on('loadedmetadata', function() {
             console.log('Video metadata loaded');
             showStatus('Stream loaded successfully');
             updatePlayerInfo();
         });
-        
+
         player.on('loadstart', function() {
             console.log('Starting to load video');
         });
-        
+
         player.on('canplay', function() {
             console.log('Video can start playing');
         });
-        
+
         player.on('error', function() {
             const error = player.error();
             console.error('Video error:', error);
@@ -506,7 +588,7 @@
                         errorMessage = 'Video loading aborted';
                         break;
                     case 2:
-                        errorMessage = 'Network error - check CORS settings';
+                        errorMessage = 'Network error - CORS issue detected. Try using the CORS proxy.';
                         break;
                     case 3:
                         errorMessage = 'Video decoding error';
@@ -517,16 +599,21 @@
                 }
                 
                 showStatus(`Error: ${errorMessage}`, true);
+                
+                // Suggest using proxy for CORS errors
+                if (error.code === 2 && !useProxyCheckbox.checked) {
+                    showStatus('CORS error detected. Try using the CORS Proxy option.', true);
+                }
             }
         });
-        
-        // Initialize with a sample stream
+
+        // Initialize with the provided stream (with proxy by default due to CORS)
         window.addEventListener('DOMContentLoaded', function() {
-            streamUrlInput.value = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-            streamTypeSelect.value = 'hls';
+            // Auto-set to use proxy for the provided URL since we know it has CORS issues
+            useProxyCheckbox.checked = true;
             
-            // Load the sample stream after a short delay
-            setTimeout(loadStream, 500);
+            // Load the stream after a short delay
+            setTimeout(loadStream, 1000);
         });
     </script>
 </body>
